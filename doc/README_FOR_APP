@@ -1,0 +1,248 @@
+
+Raptor is a *tool* designed for support people in ZTRANs.  The
+objectives are many but with the common theme to be a *tool* -- not
+another burden -- for the people in support.
+
+Retain
+
+The first area is Retain.  Using Ruby, a general support and class
+library has been created.  The method to access Retain is via "SDI"
+which is a tcp/ip based protocol that the retain staff support.  While
+it is crude and dated, it is stable and supported.  The Java toolkit
+for Retain is about the only example, other than Raptor, to use SDI.
+
+The SDI interface is broken into layers.  To understand these layers,
+a brief summary of SDI is needed.  SDI has commands such as "browse a
+problem record".  The commands generally work with a single concept in
+Retain such as a queue, a call, a problem, etc.  Each command has a
+common header followed by "data elements".  Each data element is an
+attribute or a parameter to a call.  Examples of data elements are
+problem, branch, and country for a problem record, the queue name and
+center of a queue, customer number, etc.
+
+An SDI call is made by sending a header along with data elements that
+act as parameters.  The reply is a header along with a stream of data
+elements.  
+
+The Retain::Sdi class forms a base class from which an SDI transaction
+takes place.  This class is subclassed for each of the SDI commands.
+So, to represent the PMPB SDI command, there is a Retain::Pmpb class
+which is a subclass of Retain::Sdi.  The Pmpb class and its siblings
+use a somewhat standard Ruby DSL.  The DSL (domain specific language)
+allows the particular parameters for the SDI call to be specified in a
+very simple language.  The additional attributes needed for the
+header, the required data elements as well as the optional data
+elements can be quickly specified.  There is no need to specify the
+possible return data elements since they return data elements contain
+their element ids and, thus, are essentially typed.  All this to say
+that the reply can be properly parsed without knowing any specifics.
+
+The data elements themselves are specified in Retain::Fields.  In
+Fields is a list which contains an entry for each of the data
+elements.  For each entry, the length of the element, a mnemonic name,
+how it is encoded and decoded on its path to and from Retain, and the
+element's number is kept.
+
+Retain::Fields is mostly an hash of Retain::Field values.  It is the
+Retain::Field that holds the value as well as knowledge of how to
+encode and decode it.  A Retain::Field is usually a string but can
+also be an array.  The string (array of bytes) is usually encoded from
+ASCII to EBCDIC but there are a few other special encodings as well
+such as binary.
+
+Using reflection (a new term for impure code), methods are created so
+that a field can be accessed mneumonically.  This will be ellaborated
+upon more in a moment.
+
+Layered on top of the SDI commands are the Retain "concepts" such as
+Retain::Queue, Retain::Call, Retain::Pmr, etc.  These are subclass of
+Retain::Base.  Retain::Base contains the general methods that each of
+the concepts require.  Because of this, a new concept such as Call, is
+a trivial number of lines of code that mostly just specify which SDI
+subclass to call to fetch the data elements.
+
+Again, by using reflection, methods are created so for the data
+elements.  Thus, queue.queue_name accesses the Retain::Field for the
+queue_name data element.  This is set up so that if the field already
+exists in the instance, it is merely fetched.  If it does not exist,
+then the SDI call is made to hydrate the instance and then the data
+element is accessed.
+
+Integrated into this is a data base cache for most of the Retain
+concepts.  These have Cached as the module name.  Thus, Cached::Pmr
+will be the local cached table for Retain::Pmr.  Precisely how the
+cache will be used will be tweaked over time.  For some concepts like
+queue and call, the cache will be used as a speed boost but a
+background SDI call will still be made and the web page updated when
+the call completes (more on this later).  
+
+For PMRs (more properly call Problem Records), there is a time of last
+altered in the PMR.  There are also parameters in the SDI fetch call
+to retrive only the pages needed.  In this case, the cache will be
+used to quickly display the web page.  The SDI call will be made in
+the background but only retrieve the data that may have changed or the
+new data.  This will reduce the time and also the amount of data and
+hopefully this will also result in lower cost Retain costs.
+
+The third type of cache will be a permanent cache.  For such concepts
+as the retain ID to support specialists name, the data will be fetched
+once and then cached forever.
+
+The User Experience
+
+Raptor is hooked up to LDAP and Bluepages.  So, a user must
+authenticate using their intranet mail address and password.  The user
+can then set up his retain account.  It is allowed to have more than
+one per user although that has never really been excercised.  A user
+can also specify favorite queues.
+
+From the list of favorite queues, they will be able to display a
+retain queue.  Then poke at the links to display the call, the text
+lines of the problem, etc.
+
+The intention is to use Web 2.0 GUI so that fields can be quickly and
+easily updated.  The example will be the owner id of a PMR.  If it
+displays as being incorrect (much like the Retain Workbench does
+today), it will be possible to just click on the text.  The text turns
+into an input field or a list of choices.  The user fills out the
+field or picks one of the choices, and hits ok.  At that time, the
+request will be sent back to the server, validated, and sent up to
+retain.  Errors or a successful completion will be feed back to the
+user.
+
+Process Process Process
+
+The stance is that People are not processors -- computers are.
+Support personal should be encourage to practice good work habits --
+not to follow processes.  Especially when the processes are so
+horribly defined (or undefined), confused, and volatile.
+
+A trivial examle is addtxt to a PMR.  Raptor will provide a form with
+the EPCAAT keywords alread in the form.  By providing six text areas,
+a support person can simply tab to the fields that need to be filled
+out and hit submit.  A trivial time savings but this is just the
+beginning.
+
+Another favorite example is CT.  The CT is actually what stops the
+clock from ticking but often a support specialist will just do an
+addtxt or a requeue and forget to do the CT.  Raptor can make this so
+that "forgetting" will be harder than not forgetting.
+
+There are many possibilities for Raptor to help keep track of time.
+These different possible user interfaces could all be implemented and
+the specialist could pick which one he likes or even smudge them into
+a new form.
+
+One example would be to have a link for each call on a queue.  The
+support specialist would poke the link to start the clock.  Poking the
+link for a different call would stop the first clock and start the
+second.  This could go one for the whole date.  At the end of the day,
+the specialist could go request to be told how much time was spent on
+each problem and be given a somewhat easy way to do addtxt's with the
+proper time allocation, as well as a way to alter the allocation.
+
+This seem particlar key for when times get hectic and a lot of context
+switches are being done through the day to fight the fires that crop
+up.  When the smoke finally calms at the end of the day, the *tool* will
+know which PMRs had been worked on and a very good starting guess as
+to how long.
+
+There are other ways to solve this same problem.
+
+Work Habits
+
+A few work good habits will create a tremendous amount of benefit.
+Here are two examples.
+
+Raptor wil be able to receive and store email.  A specialist can
+either BCC the mail to raptor, forward it, or "bounce" it.  In each
+case, raptor will at least know who the email came from.  It should be
+possible to deduce with a high degree of accuracy based upon the
+address fields which PMR the email pertains to.
+
+"Private" notes.  Raptor will also allow the specialist to keep
+private notes.  These will be attached to a PMR.  These are "private"
+only in the sense that they will never go out to customers.
+
+Why do this?
+
+The first is that all email having to do with customer should be
+recorded for at least as long as the PMR is open.  This just makes
+good business sense.
+
+The second reason is for after hours call out or in the case that
+someone gets sick.  The new specialist should be able to fully come up
+to speed using what is in Raptor.  By looking at the PMR, the email
+traffic, and the private notes, everything should be there, in one
+place, organized chronologically.
+
+The third reason is reports.  The semi-monthly reports should be just
+a click away all the time.  The specialist should not need to twiddle
+his thumbs until a PMR closes to toot his horn.  They are not likely
+to remember.  Instead, at the time the specialist feels like they made
+a major accomplishment, it can be recorded in the private notes
+contemporaneously.
+
+The process of funnelling the good data up the management chain should
+be a simple matter of the specialist ticking off what they want sent
+to the team lead, the team lead ticks off what they want sent to the
+manager, the manager ticks off what he wants sent up to the second
+line, etc.
+
+Also, it should be trivial for manager, team leads, and fellow team
+members to view and understand the state of a PMR.  Doing this with
+just PMR text is, at best, hard and usually impossible.  The data is
+just not there.
+
+By preaching good work habits and getting them to be practiced, the
+data will be there.  The last significant update will be right there
+in clear view with the private notes and the last email exchange.
+
+Now is the time to stress that this is a *tool*.  With proper use, it
+will save an emense of time for the specialists.  It will help remove
+the cloud of confusion over processes.  And the double bind faced
+between properly documenting but not over documenting.
+
+The War And Peace novel can be saved in the private notes and the
+specialists can cut and paste small parts into the publicaly viewable
+PMR text.  The specialists can also mark particular private updates as
+"last significant update" so that another specialists trying to come
+up to speed or a manager trying to get a quick sense of the problem
+will be quickly drawn to that note rather than the War And Peace note
+that was kept for personal benefit.  emails can be saved in full for
+other support staff to view yet also be condensed down into the PMR.
+
+Retain and other *tools*.
+
+Raptor is not just about Retain.  It will allow a specialists to click
+through a queue to a call to a problem to an APAR.  From the APAR
+click to the CMVC Defect, Tracks, and Changes.  From the changes side
+by side diffs could be displayed.  From the Defect, the specialist
+could click into RP2 to see the VRMF records, filesets that were hit,
+and prerequisites.
+
+The after hours *tools* needs to be integrated in as well as the apar
+draft *tool*.  The process to ask development for an ifix should be one
+click.
+
+Pluggable Processes.
+
+One suggestion is to have the processes somewhat pluggable.  They
+obviously need to be easy to change since they change with the wind;
+often without notice.  It seems entirely reasonable that the processes
+can be implemented as hooks which would allow them to be pluggable.
+Raptor could be moved from ZTRAN's to development or the front end
+with minimal changes.  The benefit being that the private notes and
+emails from the front end will now be made available to ZTRAN's and
+development as the PMR progressed through the system.
+
+Per User Customizations
+
+There is no such thing as a software *tool* that is not programmable.
+Since Ruby is an interpreted languge, it seem entirely plausible that
+users could have private stores of Ruby code that would hook into the
+existing structure to provide a way to "script" the *tool*.
+
+Really, this is just a generalization of the concept that the
+processes should be embedded in the *tool* and making the processes
+pluggable.
